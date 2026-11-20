@@ -31,9 +31,9 @@ Choose a [cloud server](/deploy/providers/) or prepare a [Mac mini](/deploy/mac-
 
 ## Install a prebuilt bundle
 
-Download a `server-<commit>` release from the private [Nod releases](https://github.com/n8n-io/nod/releases), when one is available. Choose `amd64` for Intel or AMD servers, or `arm64` for Apple Silicon and ARM servers. The Docker Engine must use Linux containers.
+A prebuilt `server-<commit>` bundle is distributed as a private server release when one is available. The public `n8n-io/nod` Releases page lists desktop `nod-v*` releases; it does not publish server bundles. From the public repository, use the artifact from a successful **Self-host bundle** [workflow run](https://github.com/n8n-io/nod/actions/workflows/self-host-bundle.yml) instead. Workflow artifacts expire after 14 days; approved private release assets remain available beyond that window. If no successful workflow run is available, [build from source](#build-from-source). Both bundle paths check each architecture natively and validate the standalone installer. Keep the downloaded bundle with your backups.
 
-For a revision without a server release, use a successful **Self-host bundle** [workflow run](https://github.com/n8n-io/nod/actions/workflows/self-host-bundle.yml). Workflow artifacts expire after 14 days; approved release assets remain available beyond that window. Both paths check each architecture natively and validate its standalone installer. Keep the downloaded bundle with your backups.
+Choose `amd64` for Intel or AMD servers, or `arm64` for Apple Silicon and ARM servers. The Docker Engine must use Linux containers.
 
 Check the full source commit in the release tag or workflow run before downloading. Download only from authenticated GitHub; the bundle's checksums detect transfer corruption. Repository access is needed on the computer downloading the files. Maintainers can [prepare a private server release](/deploy/server-operations/#prepare-a-private-server-release) after approval; this does not make the repository public.
 
