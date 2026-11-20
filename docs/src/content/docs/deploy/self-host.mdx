@@ -31,7 +31,7 @@ Choose a [cloud server](/deploy/providers/) or prepare a [Mac mini](/deploy/mac-
 
 ## Install a prebuilt bundle
 
-Download a prebuilt bundle from a successful **Self-host bundle** [workflow run](https://github.com/n8n-io/nod/actions/workflows/self-host-bundle.yml). Open the run and check that the `nod-server-linux-<architecture>-<commit>` artifact is still listed. Workflow artifacts expire after 14 days. If none is available, [build from source](#build-from-source). Both paths check each architecture natively and validate the standalone installer. Keep the downloaded bundle with your backups.
+Download a prebuilt bundle from a successful **Self-host bundle** [workflow run](https://github.com/n8n-io/nod/actions/workflows/self-host-bundle.yml). Open the run and check that the `nod-server-linux-<architecture>-<commit>` artifact is still listed. Workflow artifacts expire after 14 days. If none is available, [build from source](#build-from-source). The Self-host bundle workflow builds and validates each architecture natively before uploading its artifact. Its private server release job runs only after both architecture jobs succeed. Keep the downloaded bundle with your backups.
 
 The public [Releases](https://github.com/n8n-io/nod/releases) page lists only desktop `nod-v*` releases, not server bundles. Maintainers can also [prepare a private server release](/deploy/server-operations/#prepare-a-private-server-release), whose files don't expire.
 
