@@ -37,10 +37,14 @@ test('voice preview audio stays attached to the document until it is disposed', 
   player.load = () => {
     reloaded = true;
   };
+  player.onended = () => {};
+  player.onerror = () => {};
 
   disposeVoicePreviewAudio(player);
   assert.equal(paused, true);
   assert.equal(reloaded, true);
+  assert.equal(player.onended, null);
+  assert.equal(player.onerror, null);
   assert.equal(player.hasAttribute('src'), false);
   assert.equal(player.isConnected, false);
 });
