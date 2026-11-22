@@ -5,6 +5,7 @@ import { useModels } from '../hooks/use-models';
 import { usePageData } from '../hooks/use-page-data';
 import { useVoiceRecorder } from '../hooks/use-voice-recorder';
 import { api, apiResponse, errorMessage } from '../lib/api';
+import { createVoicePreviewAudio, disposeVoicePreviewAudio } from '../lib/audio-preview';
 import { desktopSettingsAvailable } from '../lib/desktop';
 import { savePreferences } from '../lib/preferences';
 import { SearchPicker } from './search-picker';
@@ -72,13 +73,7 @@ export function VoiceSettings({ onBusyChange }: { onBusyChange(busy: boolean): v
   function stop() {
     previewRequest.current?.abort();
     previewRequest.current = null;
-    if (audio.current) {
-      audio.current.onended = null;
-      audio.current.onerror = null;
-      audio.current.pause();
-      audio.current.removeAttribute('src');
-      audio.current.load();
-    }
+    if (audio.current) disposeVoicePreviewAudio(audio.current);
     audio.current = null;
     if (previewUrl.current) URL.revokeObjectURL(previewUrl.current);
     previewUrl.current = null;
@@ -270,7 +265,7 @@ export function VoiceSettings({ onBusyChange }: { onBusyChange(busy: boolean): v
       controller.signal.throwIfAborted();
       const url = URL.createObjectURL(blob);
       previewUrl.current = url;
-      const player = new Audio(url);
+      const player = createVoicePreviewAudio(url);
       audio.current = player;
       player.onended = stop;
       player.onerror = () => {
