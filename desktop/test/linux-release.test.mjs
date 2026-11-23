@@ -4,7 +4,11 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { runInNewContext } from 'node:vm';
-import { linuxReleaseFiles, packageLinuxBundle } from '../scripts/linux-release.mjs';
+import {
+  linuxReleaseFiles,
+  packageLinuxBundle,
+  verifyLinuxApplicationMetadata,
+} from '../scripts/linux-release.mjs';
 import { desktopBuildOptions } from '../scripts/release-tools.mjs';
 
 test('desktop release metadata keeps the trace token and release flag together', () => {
@@ -16,6 +20,42 @@ test('desktop release metadata keeps the trace token and release flag together',
     { tracesToken, release: true },
   );
   assert.throws(() => desktopBuildOptions({ NOD_TRACES_TOKEN: 'invalid token' }), /URL-safe/);
+});
+
+test('Linux Flatpak metadata must match the expected release version and source', () => {
+  const expected = { version: '0.9.2', source: 'a'.repeat(40) };
+  const application = {
+    version: expected.version,
+    nodBuild: { source: expected.source },
+  };
+
+  assert.doesNotThrow(() =>
+    verifyLinuxApplicationMetadata(JSON.stringify(application), expected),
+  );
+  assert.throws(
+    () =>
+      verifyLinuxApplicationMetadata(
+        JSON.stringify({ ...application, version: '0.9.1' }),
+        expected,
+      ),
+    /does not match its release version or source/,
+  );
+  assert.throws(
+    () =>
+      verifyLinuxApplicationMetadata(
+        JSON.stringify({ ...application, nodBuild: { source: 'b'.repeat(40) } }),
+        expected,
+      ),
+    /does not match its release version or source/,
+  );
+  assert.throws(
+    () => verifyLinuxApplicationMetadata('{invalid json', expected),
+    /metadata is invalid/,
+  );
+  assert.throws(
+    () => verifyLinuxApplicationMetadata('null', expected),
+    /does not match its release version or source/,
+  );
 });
 
 test('Linux release parts preserve the bundle and reject missing, changed or unrelated files', async (t) => {

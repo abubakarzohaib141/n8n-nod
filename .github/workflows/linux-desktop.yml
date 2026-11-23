@@ -115,6 +115,18 @@ jobs:
           flatpak-builder --user --force-clean --default-branch=stable --repo=.local/flatpak-repo .local/flatpak-build desktop/flatpak/io.n8n.Nod.yml
           flatpak build-bundle --arch=x86_64 --runtime-repo=https://dl.flathub.org/repo/flathub.flatpakrepo .local/flatpak-repo .local/nod-linux-x64.flatpak io.n8n.Nod stable
           flatpak install --user --noninteractive --no-deps .local/nod-linux-x64.flatpak
+      - name: Verify the installed app version and source
+        run: |
+          APP_METADATA="$(dbus-run-session -- flatpak run --command=cat io.n8n.Nod /app/nod/resources/app/package.json)"
+          printf '%s\n' "$APP_METADATA" | node --input-type=module -e '
+            import { verifyLinuxApplicationMetadata } from "./desktop/scripts/linux-release.mjs";
+            let metadata = "";
+            for await (const chunk of process.stdin) metadata += chunk;
+            verifyLinuxApplicationMetadata(metadata, {
+              version: process.env.NOD_DESKTOP_VERSION,
+              source: process.env.NOD_RELEASE_SOURCE,
+            });
+          '
       - name: Check the installed engine inside Flatpak
         run: |
           dbus-run-session -- flatpak run --env=ELECTRON_RUN_AS_NODE=1 --command=sh io.n8n.Nod -c 'cd /app/nod/resources/engine && exec "$@"' nod-check /app/nod/nod --input-type=module -e '

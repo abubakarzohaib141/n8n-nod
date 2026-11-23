@@ -17,6 +17,27 @@ async function digest(path) {
   return value.digest('hex');
 }
 
+export function verifyLinuxApplicationMetadata(content, { version, source }) {
+  let application;
+  try {
+    application = JSON.parse(content);
+  } catch {
+    throw new Error('The installed Linux application metadata is invalid.');
+  }
+  if (
+    !application ||
+    typeof application !== 'object' ||
+    Array.isArray(application) ||
+    !/^\d+\.\d+\.\d+(?:-[a-zA-Z0-9.-]+)?$/.test(version || '') ||
+    !/^[a-f0-9]{40}$/.test(source || '') ||
+    application.version !== version ||
+    application.nodBuild?.source !== source
+  )
+    throw new Error(
+      'The installed Linux application does not match its release version or source.',
+    );
+}
+
 export async function packageLinuxBundle({
   root,
   bundle,
