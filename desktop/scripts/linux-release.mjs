@@ -26,7 +26,7 @@ export function verifyLinuxApplicationMetadata(content, { version, source }) {
   }
   if (!application || typeof application !== 'object' || Array.isArray(application))
     throw new Error('The installed Linux application metadata must be a JSON object.');
-  if (!/^\\d+\\.\\d+\\.\\d+(?:-[a-zA-Z0-9.-]+)?$/.test(version || ''))
+  if (!/^\d+\.\d+\.\d+(?:-[a-zA-Z0-9.-]+)?$/.test(version || ''))
     throw new Error('The expected Linux release version is invalid.');
   if (!/^[a-f0-9]{40}$/.test(source || ''))
     throw new Error('The expected Linux release source is invalid.');
@@ -68,10 +68,10 @@ export async function packageLinuxBundle({
     bundle: { file: bundleName, bytes, sha256: await digest(bundle) },
     parts,
   };
-  await writeFile(join(directory, manifestName), JSON.stringify(manifest, null, 2) + '\\n');
+  await writeFile(join(directory, manifestName), JSON.stringify(manifest, null, 2) + '\n');
   await writeFile(
     join(directory, checksumsName),
-    [...parts, manifest.bundle].map((entry) => `${entry.sha256}  ${entry.file}\\n`).join(''),
+    [...parts, manifest.bundle].map((entry) => `${entry.sha256}  ${entry.file}\n`).join(''),
   );
   await linuxReleaseFiles(root, { version, source });
 }
@@ -80,7 +80,7 @@ export async function linuxReleaseFiles(root, { version, source }) {
   const directory = join(root, 'dist/desktop/linux-x64');
   const manifest = JSON.parse(await readFile(join(directory, manifestName), 'utf8'));
   if (
-    !/^\\d+\\.\\d+\\.\\d+$/.test(version || '') ||
+    !/^\d+\.\d+\.\d+$/.test(version || '') ||
     !/^[a-f0-9]{40}$/.test(source || '') ||
     manifest.platform !== 'linux-x64' ||
     manifest.version !== version ||
@@ -121,7 +121,7 @@ export async function linuxReleaseFiles(root, { version, source }) {
   if (bytes !== manifest.bundle.bytes || whole.digest('hex') !== manifest.bundle.sha256)
     throw new Error('The Linux bundle failed its checksum.');
   const checksums = [...manifest.parts, manifest.bundle]
-    .map((entry) => `${entry.sha256}  ${entry.file}\\n`)
+    .map((entry) => `${entry.sha256}  ${entry.file}\n`)
     .join('');
   if ((await readFile(join(directory, checksumsName), 'utf8')) !== checksums)
     throw new Error('The Linux checksums do not match.');
