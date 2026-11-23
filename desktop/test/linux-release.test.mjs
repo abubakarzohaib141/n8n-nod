@@ -22,7 +22,7 @@ test('desktop release metadata keeps the trace token and release flag together',
   assert.throws(() => desktopBuildOptions({ NOD_TRACES_TOKEN: 'invalid token' }), /URL-safe/);
 });
 
-test('Linux Flatpak metadata must match the expected release version and source', () => {
+test('Linux Flatpak metadata reports the invalid field', () => {
   const expected = { version: '0.9.2', source: 'a'.repeat(40) };
   const application = {
     version: expected.version,
@@ -33,12 +33,40 @@ test('Linux Flatpak metadata must match the expected release version and source'
     verifyLinuxApplicationMetadata(JSON.stringify(application), expected),
   );
   assert.throws(
+    () => verifyLinuxApplicationMetadata('{invalid json', expected),
+    /metadata is invalid JSON/,
+  );
+  assert.throws(
+    () => verifyLinuxApplicationMetadata('null', expected),
+    /metadata must be a JSON object/,
+  );
+  assert.throws(
+    () => verifyLinuxApplicationMetadata('[]', expected),
+    /metadata must be a JSON object/,
+  );
+  assert.throws(
+    () =>
+      verifyLinuxApplicationMetadata(JSON.stringify(application), {
+        ...expected,
+        version: 'not-a-version',
+      }),
+    /expected Linux release version is invalid/,
+  );
+  assert.throws(
+    () =>
+      verifyLinuxApplicationMetadata(JSON.stringify(application), {
+        ...expected,
+        source: 'not-a-commit',
+      }),
+    /expected Linux release source is invalid/,
+  );
+  assert.throws(
     () =>
       verifyLinuxApplicationMetadata(
         JSON.stringify({ ...application, version: '0.9.1' }),
         expected,
       ),
-    /does not match its release version or source/,
+    /application version does not match the release version/,
   );
   assert.throws(
     () =>
@@ -46,15 +74,15 @@ test('Linux Flatpak metadata must match the expected release version and source'
         JSON.stringify({ ...application, nodBuild: { source: 'b'.repeat(40) } }),
         expected,
       ),
-    /does not match its release version or source/,
+    /application source does not match the release source/,
   );
   assert.throws(
-    () => verifyLinuxApplicationMetadata('{invalid json', expected),
-    /metadata is invalid/,
-  );
-  assert.throws(
-    () => verifyLinuxApplicationMetadata('null', expected),
-    /does not match its release version or source/,
+    () =>
+      verifyLinuxApplicationMetadata(
+        JSON.stringify({ version: expected.version }),
+        expected,
+      ),
+    /application source does not match the release source/,
   );
 });
 
