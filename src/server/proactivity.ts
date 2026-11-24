@@ -36,8 +36,7 @@ import { lockProactivity, lockSetup } from './locks.ts';
 import { refresh } from './events.ts';
 import { logFailure } from './failure-log.ts';
 import { publicText, ownerLanguage } from './communication.ts';
-import { connectionSources } from './app-reads.ts';
-import { waitingTurnSql } from './turn-chain.ts';
+import { loadScheduleCoverage } from './schedule-coverage.ts';
 
 const text = (max: number) => z.string().trim().min(1).max(max);
 const resource = text(1024).refine((value) => !/[\u0000-\u001f]/.test(value));
@@ -1058,40 +1057,7 @@ export function createProactivity(options: {
         [ownerId, turn.turnId],
       )
     ).rows.map(({ source_id }) => source_id);
-    const connectionIds = [...new Set(batch.flatMap((sourceId) => {
-      const prefix = `${connectionSources}:`;
-      const id = sourceId.startsWith(prefix) ? sourceId.slice(prefix.length).toLowerCase() : '';
-      return z.uuid().safeParse(id).success ? [id] : [];
-    }))].sort();
-    const scheduleRows = connectionIds.length
-      ? (await pool.query<{
-          id: string; revision: number; title: string; kind: 'once' | 'recurring';
-          enabled: boolean; nextRun: Date | null; watch: string[]; activeRun: boolean;
-        }>(
-          `SELECT s.id,s.revision,s.title,s.kind,s.enabled,s.next_run_at AS "nextRun",s.watch,
-              EXISTS(
-                SELECT 1 FROM schedule_runs r JOIN turns u ON u.owner_id=r.owner_id AND u.session_id=r.turn_id
-                WHERE r.owner_id=s.owner_id AND r.schedule_id=s.id
-                  AND (u.status IN ('queued','running') OR (${waitingTurnSql('u')}))
-              ) AS "activeRun"
-           FROM schedules s
-           WHERE s.owner_id=$1 AND s.watch IS NOT NULL AND s.watch ?| $2::text[]
-             AND (s.enabled OR s.kind='recurring' OR EXISTS(
-               SELECT 1 FROM schedule_runs r JOIN turns u ON u.owner_id=r.owner_id AND u.session_id=r.turn_id
-               WHERE r.owner_id=s.owner_id AND r.schedule_id=s.id
-                 AND (u.status IN ('queued','running') OR (${waitingTurnSql('u')}))
-             ))
-           ORDER BY s.id LIMIT 21`,
-          [ownerId, connectionIds],
-        )).rows : [];
-    const scheduleCoverage = {
-      connectionIds,
-      schedules: scheduleRows.slice(0,20).map((s) => ({
-        id:s.id, revision:s.revision, title:s.title, kind:s.kind, enabled:s.enabled,
-        nextRun:s.nextRun?.toISOString() ?? null, watch:s.watch, activeRun:s.activeRun,
-      })),
-      truncated:scheduleRows.length > 20,
-    };
+    const scheduleCoverage = await loadScheduleCoverage(pool, ownerId, batch);
     return {
       instructions: proactivityInstructions,
       scheduleCoverage,
