@@ -415,7 +415,7 @@ export function createSchedules(dependencies: ScheduleDependencies) {
       .strict()
       .parse(raw);
     const run = await transaction(async (client) => {
-      await lockThread(client, ownerId);
+      await lockKey(client, `thread:${ownerId}`);
       await lockKey(client, `schedule-coverage:${ownerId}`);
       const row = (
         await client.query<ScheduleRow>(
@@ -457,7 +457,7 @@ export function createSchedules(dependencies: ScheduleDependencies) {
         : null;
     job.signal.throwIfAborted();
     const accepted = await transaction(async (client) => {
-      await lockThread(client, ownerId);
+      await lockKey(client, `thread:${ownerId}`);
       await lockKey(client, `schedule-coverage:${ownerId}`);
       const row = (
         await client.query<ScheduleRow>(
