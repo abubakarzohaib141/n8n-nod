@@ -29,12 +29,19 @@ import { personalSecret } from './memory-tree.ts';
 import { texts as codeTexts } from './chat-verification.ts';
 import { waitingTurnSql, withdrawnSql, workKindSql, workOriginSql } from './turn-chain.ts';
 import { resemblesTaskAcknowledgement } from '../shared/task-ack.ts';
+import { lockKey } from './locks.ts';
 
 const now = z.string().trim().min(1);
 const waits = z.array(
   z.object({ who: z.string().trim().min(1), via: z.string().trim().min(1) }).strict(),
 );
 const nextCheck = z.iso.datetime({ offset: true });
+const scheduleCheckInput = z.object({
+  connectionIds: z.array(z.uuid()).max(100),
+  schedules: z.array(z.object({ id: z.uuid(), revision: z.number().int().nonnegative() }).strict()).max(20),
+  truncated: z.boolean(),
+  coveredBy: z.object({ id: z.uuid(), revision: z.number().int().nonnegative() }).strict().optional(),
+}).strict();
 const credentialUrl = /(?<![\w/])(?:[a-z][a-z\d+.-]*:)?\/\/[^/\s?#<>]*@/iu;
 const input = z.discriminatedUnion('action', [
   z.object({ action: z.literal('list') }).strict(),
@@ -45,6 +52,7 @@ const input = z.discriminatedUnion('action', [
       action: z.literal('start'),
       title: z.string().trim().min(1),
       key: z.string().trim().min(1).max(200).optional(),
+      scheduleCheck: scheduleCheckInput.optional(),
       message: z.string().trim().min(1),
       doneWhen: z.string().trim().min(1),
       now,
@@ -476,6 +484,56 @@ export function createTasks(options: {
       if (current.task_id) throw failure('This session already has a task. Use update.');
       let startAfter: Date | undefined;
       if (current.proactive) {
+        if (!request.scheduleCheck)
+          throw failure('Check current schedule coverage before starting observer work.');
+        await lockKey(client, `schedule-coverage:${ownerId}`);
+        const sourceRows = (await client.query<{ source_id: string }>(
+          'SELECT source_id FROM proactive_sources WHERE owner_id=$1 AND claimed_turn=$2',
+          [ownerId, turn.turnId],
+        )).rows;
+        const connectionIds = [...new Set(sourceRows.flatMap(({ source_id }) =>
+          source_id.startsWith('connections:') ? [source_id.slice('connections:'.length).toLowerCase()] : [],
+        ))].sort();
+        const suppliedConnectionIds = [...new Set(request.scheduleCheck.connectionIds.map((id) => id.toLowerCase()))].sort();
+        if (JSON.stringify(connectionIds) !== JSON.stringify(suppliedConnectionIds))
+          throw failure('The observed connections changed. Refresh schedule coverage before starting this task.');
+        if (request.scheduleCheck.truncated)
+          throw failure('There are too many matching schedules to verify safely. Do not start this task yet.');
+        const scheduleRows = connectionIds.length
+          ? (await client.query<{
+              id: string; revision: number; title: string; kind: 'once' | 'recurring';
+              enabled: boolean; nextRun: Date | null; watch: string[]; activeRun: boolean;
+            }>(
+              `SELECT s.id,s.revision,s.title,s.kind,s.enabled,s.next_run_at AS "nextRun",s.watch,
+                  EXISTS(
+                    SELECT 1 FROM schedule_runs r JOIN turns u ON u.owner_id=r.owner_id AND u.session_id=r.turn_id
+                    WHERE r.owner_id=s.owner_id AND r.schedule_id=s.id
+                      AND (u.status IN ('queued','running') OR (${waitingTurnSql('u')}))
+                  ) AS "activeRun"
+               FROM schedules s
+               WHERE s.owner_id=$1 AND s.watch IS NOT NULL AND s.watch ?| $2::text[]
+                 AND (s.enabled OR s.kind='recurring' OR EXISTS(
+                   SELECT 1 FROM schedule_runs r JOIN turns u ON u.owner_id=r.owner_id AND u.session_id=r.turn_id
+                   WHERE r.owner_id=s.owner_id AND r.schedule_id=s.id
+                     AND (u.status IN ('queued','running') OR (${waitingTurnSql('u')}))
+                 ))
+               ORDER BY s.id LIMIT 21`,
+              [ownerId, connectionIds],
+            )).rows : [];
+        const actual = scheduleRows.map(({ id, revision }) => ({ id, revision })).sort((x,y) => x.id.localeCompare(y.id));
+        const supplied = request.scheduleCheck.schedules.map(({ id, revision }) => ({ id, revision })).sort((x,y) => x.id.localeCompare(y.id));
+        if (scheduleRows.length > 20 || JSON.stringify(actual) !== JSON.stringify(supplied))
+          throw failure('The schedule list changed. Refresh schedule coverage before starting this task.');
+        if (request.scheduleCheck.coveredBy) {
+          const covered = scheduleRows.find((s) => s.id === request.scheduleCheck!.coveredBy!.id && s.revision === request.scheduleCheck!.coveredBy!.revision);
+          if (!covered) throw failure('The referenced schedule is no longer current. Refresh schedule coverage.');
+          const status = covered.enabled || covered.activeRun ? 'covered' : covered.kind === 'recurring' ? 'paused' : 'inactive';
+          if (status === 'inactive') throw failure('The referenced one-time schedule is no longer active. Reassess the work.');
+          return { scheduleCoverage: { status, schedule: {
+            id: covered.id, title: covered.title, revision: covered.revision,
+            enabled: covered.enabled, activeRun: covered.activeRun, nextRun: covered.nextRun?.toISOString() ?? null,
+          } } };
+        }
         if (!request.key)
           throw failure('Use a stable source record and change as the key for this work.');
         if (
