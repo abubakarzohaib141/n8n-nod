@@ -30,6 +30,7 @@ import { texts as codeTexts } from './chat-verification.ts';
 import { waitingTurnSql, withdrawnSql, workKindSql, workOriginSql } from './turn-chain.ts';
 import { resemblesTaskAcknowledgement } from '../shared/task-ack.ts';
 import { lockKey } from './locks.ts';
+import { loadScheduleCoverage } from './schedule-coverage.ts';
 
 const now = z.string().trim().min(1);
 const waits = z.array(
@@ -491,41 +492,20 @@ export function createTasks(options: {
           'SELECT source_id FROM proactive_sources WHERE owner_id=$1 AND claimed_turn=$2',
           [ownerId, turn.turnId],
         )).rows;
-        const connectionIds = [...new Set(sourceRows.flatMap(({ source_id }) =>
-          source_id.startsWith('connections:') ? [source_id.slice('connections:'.length).toLowerCase()] : [],
-        ))].sort();
+        const coverage = await loadScheduleCoverage(client, ownerId, sourceRows.map(({ source_id }) => source_id));
         const suppliedConnectionIds = [...new Set(request.scheduleCheck.connectionIds.map((id) => id.toLowerCase()))].sort();
-        if (JSON.stringify(connectionIds) !== JSON.stringify(suppliedConnectionIds))
+        if (JSON.stringify(coverage.connectionIds) !== JSON.stringify(suppliedConnectionIds))
           throw failure('The observed connections changed. Refresh schedule coverage before starting this task.');
-        if (request.scheduleCheck.truncated)
+        if (request.scheduleCheck.truncated || coverage.truncated)
           throw failure('There are too many matching schedules to verify safely. Do not start this task yet.');
-        const scheduleRows = connectionIds.length
-          ? (await client.query<{
-              id: string; revision: number; title: string; kind: 'once' | 'recurring';
-              enabled: boolean; nextRun: Date | null; watch: string[]; activeRun: boolean;
-            }>(
-              `SELECT s.id,s.revision,s.title,s.kind,s.enabled,s.next_run_at AS "nextRun",s.watch,
-                  EXISTS(
-                    SELECT 1 FROM schedule_runs r JOIN turns u ON u.owner_id=r.owner_id AND u.session_id=r.turn_id
-                    WHERE r.owner_id=s.owner_id AND r.schedule_id=s.id
-                      AND (u.status IN ('queued','running') OR (${waitingTurnSql('u')}))
-                  ) AS "activeRun"
-               FROM schedules s
-               WHERE s.owner_id=$1 AND s.watch IS NOT NULL AND s.watch ?| $2::text[]
-                 AND (s.enabled OR s.kind='recurring' OR EXISTS(
-                   SELECT 1 FROM schedule_runs r JOIN turns u ON u.owner_id=r.owner_id AND u.session_id=r.turn_id
-                   WHERE r.owner_id=s.owner_id AND r.schedule_id=s.id
-                     AND (u.status IN ('queued','running') OR (${waitingTurnSql('u')}))
-                 ))
-               ORDER BY s.id LIMIT 21`,
-              [ownerId, connectionIds],
-            )).rows : [];
-        const actual = scheduleRows.map(({ id, revision }) => ({ id, revision })).sort((x,y) => x.id.localeCompare(y.id));
-        const supplied = request.scheduleCheck.schedules.map(({ id, revision }) => ({ id, revision })).sort((x,y) => x.id.localeCompare(y.id));
-        if (scheduleRows.length > 20 || JSON.stringify(actual) !== JSON.stringify(supplied))
+        const actual = coverage.schedules.map(({ id, revision }) => ({ id, revision }));
+        const supplied = request.scheduleCheck.schedules
+          .map(({ id, revision }) => ({ id: id.toLowerCase(), revision }))
+          .sort((x,y) => x.id.localeCompare(y.id));
+        if (JSON.stringify(actual) !== JSON.stringify(supplied))
           throw failure('The schedule list changed. Refresh schedule coverage before starting this task.');
         if (request.scheduleCheck.coveredBy) {
-          const covered = scheduleRows.find((s) => s.id === request.scheduleCheck!.coveredBy!.id && s.revision === request.scheduleCheck!.coveredBy!.revision);
+          const covered = coverage.schedules.find((s) => s.id === request.scheduleCheck!.coveredBy!.id.toLowerCase() && s.revision === request.scheduleCheck!.coveredBy!.revision);
           if (!covered) throw failure('The referenced schedule is no longer current. Refresh schedule coverage.');
           const status = covered.enabled || covered.activeRun ? 'covered' : covered.kind === 'recurring' ? 'paused' : 'inactive';
           if (status === 'inactive') throw failure('The referenced one-time schedule is no longer active. Reassess the work.');
