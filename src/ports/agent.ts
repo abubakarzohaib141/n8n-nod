@@ -90,6 +90,20 @@ export interface ConnectedMcpServer {
 export interface RuntimeContext {
   proactivity?: {
     instructions: string;
+    scheduleCoverage: {
+      connectionIds: string[];
+      schedules: Array<{
+        id: string;
+        revision: number;
+        title: string;
+        kind: 'once' | 'recurring';
+        enabled: boolean;
+        nextRun: string | null;
+        watch: string[];
+        activeRun: boolean;
+      }>;
+      truncated: boolean;
+    };
     issues: Array<
       Pick<
         ProactiveIssue,
