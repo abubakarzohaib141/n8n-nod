@@ -36,6 +36,7 @@ test(
     const db = await import('../src/server/db.ts');
     const { createPersonalService } = await import('../src/server/personal.ts');
     const { createTasks } = await import('../src/server/tasks.ts');
+    const { loadScheduleCoverage } = await import('../src/server/schedule-coverage.ts');
     const thread = await import('../src/server/thread.ts');
     const { createChannels } = await import('../src/server/channels.ts');
     const { turnOrigin } = await import('../src/server/approvals.ts');
@@ -249,6 +250,33 @@ test(
         schedule_runs_schedule_id_schedule_revision_scheduled_for_key
         UNIQUE(schedule_id,schedule_revision,scheduled_for)`);
       await personal.initialize({ workers: false });
+
+      await t.test('invalid manual runs do not create an empty conversation', async () => {
+        const before = Number((await db.pool.query(
+          'SELECT count(*) AS count FROM threads WHERE owner_id=$1', [ownerId],
+        )).rows[0].count);
+        const response = await runNow({ id: randomUUID(), revision: 0 } as Schedule);
+        assert.equal(response.statusCode, 404, response.body);
+        const after = Number((await db.pool.query(
+          'SELECT count(*) AS count FROM threads WHERE owner_id=$1', [ownerId],
+        )).rows[0].count);
+        assert.equal(after, before);
+      });
+
+      await t.test('observer schedule coverage is bounded and scoped to watched connections', async () => {
+        const connectionId = randomUUID();
+        watched.set(connectionId, 'fixture-state');
+        const schedule = await create({ cron: '0 9 * * *', watch: [connectionId] });
+        const coverage = await loadScheduleCoverage(
+          db.pool, ownerId, [`connections:${connectionId.toUpperCase()}`],
+        );
+        assert.deepEqual(coverage.connectionIds, [connectionId]);
+        assert.equal(coverage.truncated, false);
+        assert.deepEqual(
+          coverage.schedules.map(({ id, revision }) => ({ id, revision })),
+          [{ id: schedule.id.toLowerCase(), revision: schedule.revision }],
+        );
+      });
 
       await t.test(
         'manual runs retain timing and start once across concurrent requests and retries',
