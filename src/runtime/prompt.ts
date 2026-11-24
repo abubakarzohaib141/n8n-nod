@@ -265,6 +265,10 @@ function requestParts(
             'source catalog',
             JSON.stringify(context.proactivity.sources),
           ),
+          proactiveScheduleCoverage: untrustedBlock(
+            'schedule coverage snapshot',
+            JSON.stringify(context.proactivity.scheduleCoverage),
+          ),
         }
       : {}),
     ...(context.spendingLimitReached ? { spendingLimitReached: context.spendingLimitReached } : {}),
