@@ -415,6 +415,8 @@ export function createSchedules(dependencies: ScheduleDependencies) {
       .strict()
       .parse(raw);
     const run = await transaction(async (client) => {
+      await lockThread(client, ownerId);
+      await lockKey(client, `schedule-coverage:${ownerId}`);
       const row = (
         await client.query<ScheduleRow>(
           `SELECT ${columns} FROM schedules WHERE id=$1 AND owner_id=$2 FOR UPDATE`,
@@ -455,6 +457,8 @@ export function createSchedules(dependencies: ScheduleDependencies) {
         : null;
     job.signal.throwIfAborted();
     const accepted = await transaction(async (client) => {
+      await lockThread(client, ownerId);
+      await lockKey(client, `schedule-coverage:${ownerId}`);
       const row = (
         await client.query<ScheduleRow>(
           `SELECT ${columns} FROM schedules WHERE id=$1 AND owner_id=$2 FOR UPDATE`,
@@ -1061,6 +1065,7 @@ export function createSchedules(dependencies: ScheduleDependencies) {
     const input = validateCreate(raw);
     await validateWatch(input.watch, input.kind);
     const created = await transaction(async (client) => {
+      await lockKey(client, `schedule-coverage:${ownerId}`);
       const source = await sourceProvenance(client, provenance);
       const route = await deliveryRoute(client, source);
       assertChange(provenance, input);
@@ -1133,6 +1138,7 @@ export function createSchedules(dependencies: ScheduleDependencies) {
     if (input.watch) await validateWatch(input.watch, input.kind ?? (await read(id)).kind);
     const mutate = input.enabled === false ? retirementTransaction : transaction;
     const row = await mutate(async (client) => {
+      await lockKey(client, `schedule-coverage:${ownerId}`);
       const previous = (
         await client.query<ScheduleRow>(
           `SELECT ${columns} FROM schedules WHERE id=$1 AND owner_id=$2 FOR UPDATE`,
@@ -1241,6 +1247,7 @@ export function createSchedules(dependencies: ScheduleDependencies) {
   async function remove(id: string) {
     z.uuid().parse(id);
     const row = await retirementTransaction(async (client) => {
+      await lockKey(client, `schedule-coverage:${ownerId}`);
       const row = (
         await client.query<ScheduleRow>(
           `SELECT ${columns} FROM schedules WHERE id=$1 AND owner_id=$2 FOR UPDATE`,
