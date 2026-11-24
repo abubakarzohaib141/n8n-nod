@@ -266,15 +266,19 @@ test(
       await t.test('observer schedule coverage is bounded and scoped to watched connections', async () => {
         const connectionId = randomUUID();
         watched.set(connectionId, 'fixture-state');
-        const schedule = await create({ cron: '0 9 * * *', watch: [connectionId] });
+        const schedules: Schedule[] = [];
+        for (let index = 0; index < 21; index++)
+          schedules.push(await create({ cron: '0 9 * * *', watch: [connectionId] }));
         const coverage = await loadScheduleCoverage(
           db.pool, ownerId, [`connections:${connectionId.toUpperCase()}`],
         );
         assert.deepEqual(coverage.connectionIds, [connectionId]);
-        assert.equal(coverage.truncated, false);
+        assert.equal(coverage.truncated, true);
+        assert.equal(coverage.schedules.length, 20);
+        assert.ok(coverage.schedules.every((schedule) => schedule.watch.includes(connectionId)));
         assert.deepEqual(
-          coverage.schedules.map(({ id, revision }) => ({ id, revision })),
-          [{ id: schedule.id.toLowerCase(), revision: schedule.revision }],
+          coverage.schedules.map(({ id }) => id),
+          schedules.map(({ id }) => id.toLowerCase()).sort().slice(0, 20),
         );
       });
 
