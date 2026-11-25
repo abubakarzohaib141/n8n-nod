@@ -155,6 +155,7 @@ interface InboxRow extends ChannelIdentity {
   thread_id: string;
   provider_reply_id: string | null;
   text: string;
+  reply_context: string | null;
   message_id: string | null;
   attachments: Artifact[];
   conversation_thread_id: string | null;
@@ -182,6 +183,7 @@ const messageSchema = z
     messageId: z.string().min(1),
     threadId: z.string().min(1),
     text: z.string().trim().max(100_000),
+    replyContext: z.string().trim().max(800).optional(),
     attachments: z
       .array(
         z.object({
@@ -336,6 +338,7 @@ export async function createChannels(pool: Pool, options: ChannelOptions) {
     created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now()
   );
   ALTER TABLE channel_inbox ADD COLUMN IF NOT EXISTS provider_reply_id text;
+  ALTER TABLE channel_inbox ADD COLUMN IF NOT EXISTS reply_context text;
   ALTER TABLE channel_inbox ADD COLUMN IF NOT EXISTS attachments jsonb NOT NULL DEFAULT '[]';
   ALTER TABLE channel_inbox ADD COLUMN IF NOT EXISTS conversation_thread_id uuid;
   ALTER TABLE channel_inbox ADD COLUMN IF NOT EXISTS media_usage_ids text[] NOT NULL DEFAULT '{}';
@@ -823,8 +826,8 @@ export async function createChannels(pool: Pool, options: ChannelOptions) {
         if (verification?.turnId && media?.usageIds.length)
           await options.attributeMediaUsage?.(database, media.usageIds, verification.turnId);
         await database.query(
-          `INSERT INTO channel_inbox(source_id,provider,account_id,sender_id,thread_id,text,received_at,message_id,state,turn_id,owner_id,channel,provider_reply_id,attachments,conversation_thread_id,media_usage_ids)
-           VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) ON CONFLICT(source_id) DO NOTHING`,
+          `INSERT INTO channel_inbox(source_id,provider,account_id,sender_id,thread_id,text,received_at,message_id,state,turn_id,owner_id,channel,provider_reply_id,attachments,conversation_thread_id,media_usage_ids,reply_context)
+           VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) ON CONFLICT(source_id) DO NOTHING`,
           [
             sourceId,
             channelId,
@@ -842,6 +845,7 @@ export async function createChannels(pool: Pool, options: ChannelOptions) {
             JSON.stringify(attachments),
             conversationThreadId ?? null,
             media?.usageIds ?? [],
+            parsed.data.replyContext ?? null,
           ],
         );
         if (strict && (closed || replacing || receiveSignal.aborted || !permitted(identity)))
@@ -1163,7 +1167,7 @@ export async function createChannels(pool: Pool, options: ChannelOptions) {
       const messageId = row.message_id ?? randomUUID();
       let inserted = false;
       const turnId = await options.submit(
-        row.text,
+        row.reply_context ? `${row.reply_context}\n\n${row.text}`.trim() : row.text,
         row.source_id,
         client,
         channel,
