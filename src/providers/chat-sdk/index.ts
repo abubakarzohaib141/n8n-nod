@@ -756,7 +756,6 @@ export function createChatSdkTransport(
         if (env.TELEGRAM_ALLOWED_USER_ID && start) return accepted();
         const replied = parsed.data.reply_to_message;
         const replyContext = telegramReplyContext(replied);
-        const inboundText = replyContext ? `${replyContext}\n\n${text}`.trim() : text;
         const message = telegram.parseMessage({
           message_id: parsed.data.message_id,
           date: parsed.data.date,
@@ -787,7 +786,8 @@ export function createChatSdkTransport(
             messageId: message.id,
             replyToMessageId: replyId,
             threadId: message.threadId,
-            text: inboundText,
+            text,
+            ...(replyContext ? { replyContext } : {}),
             ...(attachments.length ? { attachments } : {}),
             sentAt: message.metadata.dateSent,
           },
