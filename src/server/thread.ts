@@ -139,6 +139,7 @@ interface SubmitUserMessageOptions {
   displayText?: string;
   replyToMessageId?: string;
   replyQuote?: string;
+  replyContext?: string;
   seenMessageId?: string;
   clientMessageId?: string;
   questionAnswer?: QuestionAnswer;
@@ -808,7 +809,7 @@ export async function submitUserMessage(
     if (options.clientMessageId) {
       const previous = (
         await client.query(
-          'SELECT id,owner_id,role,text,display_text,audio_caption,thread_id,turn_id,attachments,reply_to_message_id,reply_quote,question_answer,approval_answer,(SELECT a.id FROM approvals a WHERE a.execution_turn_id=messages.turn_id AND a.owner_id=messages.owner_id LIMIT 1) AS approval_id FROM messages WHERE id=$1',
+          'SELECT id,owner_id,role,text,display_text,audio_caption,thread_id,turn_id,attachments,reply_to_message_id,reply_quote,question_answer,approval_answer,reply_context,(SELECT a.id FROM approvals a WHERE a.execution_turn_id=messages.turn_id AND a.owner_id=messages.owner_id LIMIT 1) AS approval_id FROM messages WHERE id=$1',
           [options.clientMessageId],
         )
       ).rows[0];
@@ -822,6 +823,7 @@ export async function submitUserMessage(
           previous.audio_caption !== (options.audioCaption ?? null) ||
           previous.reply_to_message_id !== (options.replyToMessageId ?? null) ||
           previous.reply_quote !== (options.replyQuote ?? null) ||
+          previous.reply_context !== (options.replyContext ?? null) ||
           JSON.stringify(previous.question_answer) !==
             JSON.stringify(options.questionAnswer ?? null) ||
           previous.approval_answer !== (options.approvalAnswer?.approved ?? null) ||
@@ -884,6 +886,8 @@ export async function submitUserMessage(
       (!options.replyToMessageId || !options.replyQuote.trim() || options.replyQuote.length > 4000)
     )
       throw httpError('Select a passage of 4,000 characters or fewer.');
+    if (options.replyContext !== undefined && (!options.replyContext.trim() || options.replyContext.length > 800))
+      throw httpError('The quoted channel context is invalid.');
     const live = !stop.aborted;
     const confirmed =
       options.questionAnswer || !live
@@ -951,7 +955,7 @@ export async function submitUserMessage(
     if (live) await confirmAction?.close(client, question?.session_id ?? thread.id, turnId);
     const prepared = (await options.prepareAttachments?.(client, thread.id)) ?? [];
     await client.query(
-      "INSERT INTO messages(id,owner_id,role,text,display_text,thread_id,turn_id,attachments,reply_to_message_id,reply_quote,audio_caption,question_answer) VALUES($1,$2,'user',$3,$4,$5,$6,$7,$8,$9,$10,$11)",
+      "INSERT INTO messages(id,owner_id,role,text,display_text,thread_id,turn_id,attachments,reply_to_message_id,reply_quote,audio_caption,question_answer,reply_context) VALUES($1,$2,'user',$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)",
       [
         messageId,
         ownerId,
@@ -964,6 +968,7 @@ export async function submitUserMessage(
         options.replyQuote ?? null,
         options.audioCaption ?? null,
         options.questionAnswer ? JSON.stringify(options.questionAnswer) : null,
+        options.replyContext ?? null,
       ],
     );
     if (live) await sendDrain(client, thread.id);
@@ -1878,7 +1883,7 @@ async function loadMessage(messageId: string | null) {
   const message = messageId
     ? (
         await pool.query(
-          `SELECT s.attachments,s.audio_caption,r.audio_caption AS reply_audio_caption,r.id,r.role,COALESCE(s.reply_quote,r.text) AS text,r.attachments AS reply_attachments,r.presentation,r.answer_choices,
+          `SELECT s.attachments,s.audio_caption,s.reply_context,r.audio_caption AS reply_audio_caption,r.id,r.role,COALESCE(s.reply_quote,r.text) AS text,r.attachments AS reply_attachments,r.presentation,r.answer_choices,
            s.role='user' AND NOT EXISTS (
              SELECT 1 FROM messages earlier WHERE earlier.owner_id=s.owner_id AND earlier.thread_id=s.thread_id
                AND earlier.role='user' AND (earlier.created_at,earlier.id)<(s.created_at,s.id)
@@ -1905,6 +1910,9 @@ async function loadMessage(messageId: string | null) {
   return {
     ...(typeof message?.audio_caption === 'string'
       ? { audioCaption: message.audio_caption as string }
+      : {}),
+    ...(typeof message?.reply_context === 'string' && message.reply_context
+      ? { replyContext: message.reply_context as string }
       : {}),
     voice: ((message?.attachments ?? []) as StoredAttachment[]).some((file) =>
       file.mimeType?.startsWith('audio/'),
@@ -1941,8 +1949,8 @@ async function loadTurnContext(turn: any, dependencies: ThreadDependencies) {
       `WITH seen AS (SELECT max(started_at) AS at FROM turns
          WHERE owner_id=$1 AND thread_id=$2 AND session_id=$6 AND id<>$4),
        boundary AS (SELECT created_at AS at FROM turns WHERE owner_id=$1 AND thread_id=$2 AND id=$4)
-       SELECT role,text,audio_caption AS "audioCaption",created_at AS "createdAt",reaction,attachments,presentation,answer_choices AS "answerChoices",unseen,turn_id AS "turnId" FROM (
-       SELECT m.role,m.text,m.audio_caption,m.created_at,m.id,m.reaction,m.attachments,m.presentation,m.answer_choices,m.turn_id,
+       SELECT role,text,reply_context AS "replyContext",audio_caption AS "audioCaption",created_at AS "createdAt",reaction,attachments,presentation,answer_choices AS "answerChoices",unseen,turn_id AS "turnId" FROM (
+       SELECT m.role,m.text,m.reply_context,m.audio_caption,m.created_at,m.id,m.reaction,m.attachments,m.presentation,m.answer_choices,m.turn_id,
        COALESCE(u.background AND m.created_at > COALESCE(seen.at,'-infinity'),false) AS unseen
        FROM messages m JOIN threads th ON th.id=m.thread_id CROSS JOIN seen CROSS JOIN boundary
        LEFT JOIN turns u ON u.id=m.turn_id AND u.owner_id=m.owner_id
@@ -2005,6 +2013,7 @@ async function loadTurnContext(turn: any, dependencies: ThreadDependencies) {
     context: {
       ...(restarted?.rows[0]?.at ? { contextRestart: restarted.rows[0].at.toISOString() } : {}),
       firstConversationTurn: source.firstConversationTurn,
+      ...(source.replyContext ? { replyContext: source.replyContext } : {}),
       timeZone,
       locale: preference?.locale || formattingLocale(timeZone ? timeZoneRegion(timeZone) : null),
       hourCycle: preference?.hour_cycle || defaultPreferences.hourCycle,
@@ -2652,6 +2661,7 @@ async function executeTurn(turn: any, dependencies: ThreadDependencies) {
                     : {}),
                   attachments: await stageUploads(uploads, loadedMessage.inputAttachments),
                   ...(replyTo ? { replyTo: describe(replyTo) } : {}),
+                  ...(loadedMessage.replyContext ? { replyContext: loadedMessage.replyContext } : {}),
                 });
               }
               return messages;
