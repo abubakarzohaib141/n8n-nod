@@ -37,6 +37,7 @@ export interface InboundMessage {
   messageId: string;
   threadId: string;
   text: string;
+  replyContext?: string;
   attachments?: MessagingAttachment[];
   replyToMessageId?: string;
   sentAt: Date;
