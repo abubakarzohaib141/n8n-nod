@@ -37,7 +37,12 @@ import type { ConnectedApp } from '../src/ports/integrations.ts';
 import type { MemoryCurator } from '../src/ports/memory-curator.ts';
 import { ObjectStoreConflict, type PrivateObjectStore } from '../src/ports/object-storage.ts';
 import { createAgentRuntime, webTarget } from '../src/runtime/index.ts';
-import { compactOwnerContext, firstInstruction, ownerContext, steeredInstruction } from '../src/runtime/prompt.ts';
+import {
+  compactOwnerContext,
+  firstInstruction,
+  ownerContext,
+  steeredInstruction,
+} from '../src/runtime/prompt.ts';
 import { createPreferencesStore } from '../src/server/preferences.ts';
 import type { ThreadDependencies } from '../src/server/thread.ts';
 import type {
@@ -71,7 +76,7 @@ test('quoted Telegram reply context is untrusted and separate from owner words',
     new Set(),
   );
   const payload = JSON.parse(
-    prompt.split('Request data (JSON):\\n')[1]!.split('\\n\\n')[0]!,
+    prompt.split('Request data (JSON):\n')[1]!,
   ) as { currentInstruction: string; quotedReplyContext: string };
   assert.equal(payload.currentInstruction, 'Summarize this reply.');
   assert.match(payload.quotedReplyContext, /<untrusted_tool_result source="quoted Telegram reply">/);
@@ -83,7 +88,7 @@ test('quoted Telegram reply context is untrusted and separate from owner words',
     new Set(),
   );
   const steeredData = JSON.parse(
-    steered.split('Request data (JSON):\\n')[1]!,
+    steered.split('Request data (JSON):\n')[1]!,
   ) as { currentInstruction: string; quotedReplyContext: string };
   assert.equal(steeredData.currentInstruction, 'Please review it.');
   assert.match(steeredData.quotedReplyContext, /<untrusted_tool_result/);
