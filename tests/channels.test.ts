@@ -2050,9 +2050,10 @@ test('Telegram media keeps native replies and checks the sender before any downl
   };
   const result = await receive(message);
   assert.equal(result.messages?.length, 1);
+  assert.equal(result.messages[0].text, 'Read this image');
   assert.equal(
-    result.messages[0].text,
-    '[Replying to Alex Morgan: a photo: “Could you review this image?”]\n\nRead this image',
+    result.messages[0].replyContext,
+    '[Replying to Alex Morgan: a photo: “Could you review this image?”]',
   );
   assert.equal(result.messages[0].replyToMessageId, '123456:41');
   const voiceReply = await receive({
@@ -2063,10 +2064,8 @@ test('Telegram media keeps native replies and checks the sender before any downl
       voice: { file_id: 'quoted-voice' },
     },
   });
-  assert.equal(
-    voiceReply.messages?.[0].text,
-    '[Replying to Nod: a voice message]\n\nRead this image',
-  );
+  assert.equal(voiceReply.messages?.[0].text, 'Read this image');
+  assert.equal(voiceReply.messages?.[0].replyContext, '[Replying to Nod: a voice message]');
   const documentReply = await receive({
     ...message,
     reply_to_message: {
@@ -2076,16 +2075,29 @@ test('Telegram media keeps native replies and checks the sender before any downl
       document: { file_id: 'quoted-document', file_name: 'agenda.pdf' },
     },
   });
+  assert.equal(documentReply.messages?.[0].text, 'Read this image');
   assert.equal(
-    documentReply.messages?.[0].text,
-    '[Replying to Ops room: a file "agenda.pdf": “Please check this file.”]\n\nRead this image',
+    documentReply.messages?.[0].replyContext,
+    '[Replying to Ops room: a file "agenda.pdf": “Please check this file.”]',
+  );
+  const senderChatUsernameReply = await receive({
+    ...message,
+    reply_to_message: {
+      message_id: 37,
+      sender_chat: { username: 'ops_room' },
+      text: 'Please check this.',
+    },
+  });
+  assert.equal(
+    senderChatUsernameReply.messages?.[0].replyContext,
+    '[Replying to @ops_room: “Please check this.”]',
   );
   const longReply = await receive({
     ...message,
     reply_to_message: { message_id: 38, text: '🙂'.repeat(520) },
   });
-  assert.ok(longReply.messages?.[0].text.includes('🙂'.repeat(499) + '…'));
-  assert.ok(!longReply.messages?.[0].text.includes('🙂'.repeat(500)));
+  assert.ok(longReply.messages?.[0].replyContext?.includes('🙂'.repeat(499) + '…'));
+  assert.ok(!longReply.messages?.[0].replyContext?.includes('🙂'.repeat(500)));
   assert.equal(requests.length, 0);
   assert.deepEqual(Buffer.from(await result.messages[0].attachments![0].read()), bytes);
   requests.length = 0;
@@ -2138,6 +2150,7 @@ test('Telegram media keeps native replies and checks the sender before any downl
     photo: undefined,
     caption: undefined,
     voice: { file_id: 'fixture-voice', file_size: 12 },
+    reply_to_message: undefined,
   });
   assert.equal(voice.messages![0].attachments![0].voice, true);
   assert.equal(voice.messages![0].text, '');
