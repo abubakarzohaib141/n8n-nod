@@ -3573,6 +3573,7 @@ async function initializeApplication(
         attachments,
         onInserted,
         stopSignal,
+        replyContext,
       ) =>
         (
           await userMessages.submit(text, attachments, {
@@ -3581,6 +3582,7 @@ async function initializeApplication(
             client,
             clientMessageId: messageId,
             replyToMessageId,
+            replyContext,
             answer,
             onInserted,
             stopSignal,
