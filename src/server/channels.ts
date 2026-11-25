@@ -91,6 +91,7 @@ interface ChannelOptions {
     attachments?: Artifact[],
     onInserted?: () => void,
     stopSignal?: AbortSignal,
+    replyContext?: string,
   ) => Promise<string>;
   stopSignal?: () => AbortSignal;
   messageAccepted?: () => (channel: string) => void;
@@ -1167,7 +1168,7 @@ export async function createChannels(pool: Pool, options: ChannelOptions) {
       const messageId = row.message_id ?? randomUUID();
       let inserted = false;
       const turnId = await options.submit(
-        row.reply_context ? `${row.reply_context}\n\n${row.text}`.trim() : row.text,
+        row.text,
         row.source_id,
         client,
         channel,
@@ -1179,6 +1180,7 @@ export async function createChannels(pool: Pool, options: ChannelOptions) {
           inserted = true;
         },
         stopSignal,
+        row.reply_context ?? undefined,
       );
       await options.attributeMediaUsage?.(client, row.media_usage_ids ?? [], turnId);
       await client.query(
