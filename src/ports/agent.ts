@@ -143,6 +143,7 @@ export interface RuntimeContext {
   automatic?: boolean;
   speech?: { mode: SpeechReplyMode; available: boolean };
   firstConversationTurn?: boolean;
+  replyContext?: string;
   replyTo?: {
     id: string;
     role: string;
@@ -153,6 +154,7 @@ export interface RuntimeContext {
   history: Array<{
     role: string;
     text: string;
+    replyContext?: string;
     audioCaption?: string;
     createdAt?: string | Date;
     reaction?: string | null;
