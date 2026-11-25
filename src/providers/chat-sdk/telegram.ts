@@ -62,7 +62,6 @@ export const telegramMessage = z.object({
   }),
 });
 
-
 function telegramReplyObject(value: unknown): Record<string, unknown> | undefined {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
     ? (value as Record<string, unknown>)
@@ -87,6 +86,7 @@ export function telegramReplyContext(value: unknown): string | undefined {
   const name = telegramReplyExcerpt(
     [from?.first_name, from?.last_name].filter((part): part is string => typeof part === 'string').join(' ') ||
       senderChat?.title ||
+      (typeof senderChat?.username === 'string' ? `@${senderChat.username}` : '') ||
       (typeof from?.username === 'string' ? `@${from.username}` : ''),
     80,
   );
