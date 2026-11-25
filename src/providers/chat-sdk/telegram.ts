@@ -62,6 +62,66 @@ export const telegramMessage = z.object({
   }),
 });
 
+
+function telegramReplyObject(value: unknown): Record<string, unknown> | undefined {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
+function telegramReplyExcerpt(value: unknown, limit: number) {
+  if (typeof value !== 'string') return '';
+  const normalized = value.replace(/\s+/gu, ' ').trim();
+  const characters = Array.from(normalized);
+  return characters.length > limit
+    ? `${characters.slice(0, limit - 1).join('')}…`
+    : normalized;
+}
+
+export function telegramReplyContext(value: unknown): string | undefined {
+  const reply = telegramReplyObject(value);
+  if (!reply) return undefined;
+
+  const from = telegramReplyObject(reply.from);
+  const senderChat = telegramReplyObject(reply.sender_chat);
+  const name = telegramReplyExcerpt(
+    [from?.first_name, from?.last_name].filter((part): part is string => typeof part === 'string').join(' ') ||
+      senderChat?.title ||
+      (typeof from?.username === 'string' ? `@${from.username}` : ''),
+    80,
+  );
+
+  const document = telegramReplyObject(reply.document);
+  const media = Array.isArray(reply.photo) && reply.photo.length
+    ? 'a photo'
+    : document
+      ? `a file${typeof document.file_name === 'string' ? ` "${telegramReplyExcerpt(document.file_name, 100)}"` : ''}`
+      : reply.video
+        ? 'a video'
+        : reply.audio
+          ? 'an audio file'
+          : reply.voice
+            ? 'a voice message'
+            : reply.animation
+              ? 'an animation'
+              : reply.video_note
+                ? 'a video message'
+                : reply.sticker
+                  ? 'a sticker'
+                  : reply.venue
+                    ? 'a place'
+                    : reply.location
+                      ? 'a location'
+                      : reply.contact
+                        ? 'a contact'
+                        : '';
+
+  const quoted = telegramReplyExcerpt(reply.text ?? reply.caption, 500);
+  const description = [media, quoted ? `“${quoted}”` : '']
+    .filter(Boolean)
+    .join(': ') || 'a previous message';
+  return `[Replying to ${name ? `${name}: ` : ''}${description}]`;
+}
 export function telegramAttachments(
   message: z.infer<typeof telegramMessage>,
   token: string,
