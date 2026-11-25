@@ -125,6 +125,7 @@ export async function initializeDatabase() {
       hidden_at timestamptz
     );
     ALTER TABLE messages ADD COLUMN IF NOT EXISTS reply_quote text;
+    ALTER TABLE messages ADD COLUMN IF NOT EXISTS reply_context text;
     CREATE TABLE IF NOT EXISTS feedback_drafts (
       id uuid PRIMARY KEY, owner_id text NOT NULL, thread_id uuid NOT NULL,
       summary text NOT NULL, created_at timestamptz NOT NULL DEFAULT now()
