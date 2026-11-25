@@ -8216,7 +8216,11 @@ test(
                 posted.messageId,
               ])
             ).rows[0];
-            assert.deepEqual(stored, { text: 'Use November here.', reply_quote: 'Fixture', reply_context: '[Replying to Alex: “quoted text”]' });
+            assert.deepEqual(stored, {
+              text: 'Use November here.',
+              reply_quote: 'Fixture',
+              reply_context: '[Replying to Alex: “quoted text”]',
+            });
             assert.equal(
               (await thread.submitUserMessage('Use November here.', [], options)).messageId,
               posted.messageId,
