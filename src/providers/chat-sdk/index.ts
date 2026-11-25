@@ -20,6 +20,7 @@ import {
   telegramAttachments,
   telegramMessage,
   telegramPairing,
+  telegramReplyContext,
   telegramUpdateTypes,
 } from './telegram.ts';
 import { modelServiceError } from '../model-error.ts';
@@ -754,6 +755,8 @@ export function createChatSdkTransport(
         const start = /^\/start(?:\s+(\S+))?$/.exec(parsed.data.text);
         if (env.TELEGRAM_ALLOWED_USER_ID && start) return accepted();
         const replied = parsed.data.reply_to_message;
+        const replyContext = telegramReplyContext(replied);
+        const inboundText = replyContext ? `${replyContext}\n\n${text}`.trim() : text;
         const message = telegram.parseMessage({
           message_id: parsed.data.message_id,
           date: parsed.data.date,
@@ -784,7 +787,7 @@ export function createChatSdkTransport(
             messageId: message.id,
             replyToMessageId: replyId,
             threadId: message.threadId,
-            text,
+            text: inboundText,
             ...(attachments.length ? { attachments } : {}),
             sentAt: message.metadata.dateSent,
           },
