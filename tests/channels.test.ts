@@ -2041,12 +2041,51 @@ test('Telegram media keeps native replies and checks the sender before any downl
     chat: { id: 123456, type: 'private' },
     caption: 'Read this image',
     photo: [{ file_id: 'fixture-image', file_size: bytes.length }],
-    reply_to_message: { message_id: 41 },
+    reply_to_message: {
+      message_id: 41,
+      text: 'Could you review this image?',
+      from: { first_name: 'Alex', last_name: 'Morgan' },
+      photo: [{ file_id: 'quoted-image' }],
+    },
   };
   const result = await receive(message);
   assert.equal(result.messages?.length, 1);
-  assert.equal(result.messages[0].text, 'Read this image');
+  assert.equal(
+    result.messages[0].text,
+    '[Replying to Alex Morgan: a photo: “Could you review this image?”]\n\nRead this image',
+  );
   assert.equal(result.messages[0].replyToMessageId, '123456:41');
+  const voiceReply = await receive({
+    ...message,
+    reply_to_message: {
+      message_id: 40,
+      from: { first_name: 'Nod' },
+      voice: { file_id: 'quoted-voice' },
+    },
+  });
+  assert.equal(
+    voiceReply.messages?.[0].text,
+    '[Replying to Nod: a voice message]\n\nRead this image',
+  );
+  const documentReply = await receive({
+    ...message,
+    reply_to_message: {
+      message_id: 39,
+      sender_chat: { title: 'Ops room' },
+      caption: '  Please   check\nthis file. ',
+      document: { file_id: 'quoted-document', file_name: 'agenda.pdf' },
+    },
+  });
+  assert.equal(
+    documentReply.messages?.[0].text,
+    '[Replying to Ops room: a file "agenda.pdf": “Please check this file.”]\n\nRead this image',
+  );
+  const longReply = await receive({
+    ...message,
+    reply_to_message: { message_id: 38, text: '🙂'.repeat(520) },
+  });
+  assert.ok(longReply.messages?.[0].text.includes('🙂'.repeat(499) + '…'));
+  assert.ok(!longReply.messages?.[0].text.includes('🙂'.repeat(500)));
   assert.equal(requests.length, 0);
   assert.deepEqual(Buffer.from(await result.messages[0].attachments![0].read()), bytes);
   requests.length = 0;
